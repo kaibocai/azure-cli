@@ -387,7 +387,7 @@ def load_command_table(self, _):
         g.custom_command('credentials', 'enable_credentials')
 
     with self.command_group('functionapp plan', appservice_plan_sdk) as g:
-        g.custom_command('create', 'create_functionapp_app_service_plan',
+        g.custom_command('create', 'create_flex_plan',
                          exception_handler=ex_handler_factory(creating_plan=True),
                          validator=validate_functionapp_asp_create)
         g.generic_update_command('update', setter_name='begin_create_or_update',

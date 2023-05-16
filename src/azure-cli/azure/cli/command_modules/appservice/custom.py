@@ -3516,7 +3516,7 @@ class _FunctionAppStackRuntimeHelper(_AbstractStackRuntimeHelper):
                               "Run 'az functionapp list-runtimes' for more details on supported runtimes. ")
 
     def _get_raw_stacks_from_api(self):
-        return list(self._client.provider.get_function_app_stacks(stack_os_type=None))
+        return list(self._client.provider.get_function_app_stacks(stack_os_type=None, api_version='2014-11-01-privatepreview'))
 
     # remove non-digit or non-"." chars
     @classmethod
@@ -3637,8 +3637,57 @@ def create_flex_app_service_plan(cmd, resource_group_name, name, location):
         kind="functionapp",
         name=name
     )
-    poller = client.app_service_plans.begin_create_or_update(resource_group_name, name, plan_def)
+
+    plan_def.enable_additional_properties_sending()
+    existing_properties = plan_def.serialize()["properties"]
+    plan_def.additional_properties["properties"] = existing_properties
+    plan_def.additional_properties["properties"]["sku"] = "FlexConsumption"
+    print(plan_def.serialize())
+    params = {}
+    params['stamp'] = 'kc08geo.eastus.cloudapp.azure.com'
+    poller = client.app_service_plans.begin_create_or_update(resource_group_name, name, plan_def, api_version='2014-11-01-privatepreview', params = params)
     return LongRunningOperation(cmd.cli_ctx)(poller)
+
+
+def create_flex_plan(cmd, resource_group_name, name, location=None, sku=None, tags=None, zone_redundant=None, max_burst=None):
+    from azure.cli.core.commands.client_factory import get_subscription_id
+    SkuDescription, AppServicePlan = cmd.get_models('SkuDescription', 'AppServicePlan')
+    sku_def = SkuDescription(tier='FlexConsumption', name='FL1', size='FL1', family='FL')
+    subscription_id = get_subscription_id(cmd.cli_ctx)
+    plan_id = '/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Web/serverfarms/{}'.format(subscription_id, resource_group_name, name)
+    plan_type = 'Microsoft.Web/serverfarms'
+    plan_kind = 'functionapp'
+
+    plan_def = AppServicePlan(location=location, sku=sku_def, kind=plan_kind)
+    plan_def_dict = plan_def.serialize()
+    plan_def_dict['id'] = plan_id
+    plan_def_dict['name'] = name
+    plan_def_dict['location'] = 'East US'
+    plan_def_dict['type'] = plan_type
+    plan_def_dict['properties']['sku']='FlexConsumption'
+    plan_def_dict['properties']['reserved']='true'
+    plan_json = json.dumps(plan_def_dict)
+
+    print(plan_json)
+
+    site_url_base = 'subscriptions/{}/resourceGroups/{}/providers/Microsoft.Web/serverfarms/{}?stamp={}&api-version={}'
+    site_url = site_url_base.format(subscription_id, resource_group_name, name, 'kc08geo.eastus.cloudapp.azure.com', '2014-11-01-privatepreview')
+    request_url = cmd.cli_ctx.cloud.endpoints.resource_manager + site_url
+    response = send_raw_request(cmd.cli_ctx, "PUT", request_url, body=plan_json)
+    return response.json()
+    
+
+def create_flex_app(cmd, resource_group_name, name, functionapp_def):
+    from azure.cli.core.commands.client_factory import get_subscription_id
+    functionapp_json = functionapp_def.serialize()
+    body = json.dumps(functionapp_json)
+    print(body)
+    subscription_id = get_subscription_id(cmd.cli_ctx)
+    site_url_base = 'subscriptions/{}/resourceGroups/{}/providers/Microsoft.Web/sites/{}?stamp={}&api-version={}'
+    site_url = site_url_base.format(subscription_id, resource_group_name, name, 'franklinmgeo.eastus.cloudapp.azure.com', '2016-09-01')
+    request_url = cmd.cli_ctx.cloud.endpoints.resource_manager + site_url
+    response = send_raw_request(cmd.cli_ctx, "PUT", request_url, body=body)
+    return response
 
 
 def create_functionapp_app_service_plan(cmd, resource_group_name, name, is_linux, sku, number_of_workers=None,
@@ -3827,7 +3876,7 @@ def create_functionapp(cmd, resource_group_name, name, storage_account, plan=Non
             raise ValidationError("Location is invalid. Use: az functionapp list-flexconsumption-locations")
         is_linux = True
         # Following the same plan name format as the backend
-        plan_name = "{}LinuxFlexPlan".format(flexconsumption_location)
+        plan_name = "{}FlexPlan".format(name)
         plan_info = create_flex_app_service_plan(
             cmd, resource_group_name, plan_name, flexconsumption_location)
         functionapp_def.server_farm_id = plan_info.id
@@ -3882,13 +3931,16 @@ def create_functionapp(cmd, resource_group_name, name, storage_account, plan=Non
             raise ValidationError("Invalid version {0} for runtime {1} for function apps on Flex App Service plans. "
                                   "Supported version for runtime {1} is {2}."
                                   .format(runtime_version, runtime, lang['version']))
+        
 
-    runtime_helper = _FunctionAppStackRuntimeHelper(cmd, linux=is_linux, windows=(not is_linux))
-    matched_runtime = runtime_helper.resolve("dotnet" if not runtime else runtime,
-                                             runtime_version, functions_version, is_linux)
 
-    site_config_dict = matched_runtime.site_config_dict
-    app_settings_dict = matched_runtime.app_settings_dict
+    else:
+        runtime_helper = _FunctionAppStackRuntimeHelper(cmd, linux=is_linux, windows=(not is_linux))
+        matched_runtime = runtime_helper.resolve("dotnet" if not runtime else runtime,
+                                                runtime_version, functions_version, is_linux)
+
+        site_config_dict = matched_runtime.site_config_dict
+        app_settings_dict = matched_runtime.app_settings_dict
 
     con_string = _validate_and_get_connection_string(cmd.cli_ctx, resource_group_name, storage_account)
 
@@ -4062,46 +4114,6 @@ def create_functionapp(cmd, resource_group_name, name, storage_account, plan=Non
         functionapp.identity = identity
 
     return functionapp
-
-def create_flex_plan(cmd, resource_group_name, name, location=None, sku=None, tags=None, zone_redundant=None, max_burst=None):
-    from azure.cli.core.commands.client_factory import get_subscription_id
-    SkuDescription, AppServicePlan = cmd.get_models('SkuDescription', 'AppServicePlan')
-    sku_def = SkuDescription(tier='FlexConsumption', name='FL1', size='FL1', family='FL')
-    subscription_id = get_subscription_id(cmd.cli_ctx)
-    plan_id = '/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Web/serverfarms/{}'.format(subscription_id, resource_group_name, name)
-    plan_type = 'Microsoft.Web/serverfarms'
-    plan_kind = 'functionapp'
-
-    plan_def = AppServicePlan(location=location, sku=sku_def, kind=plan_kind)
-    plan_def_dict = plan_def.serialize()
-    plan_def_dict['id'] = plan_id
-    plan_def_dict['name'] = name
-    plan_def_dict['location'] = 'East US'
-    plan_def_dict['type'] = plan_type
-    plan_def_dict['properties']['sku']='FlexConsumption'
-    plan_def_dict['properties']['reserved']='true'
-    plan_json = json.dumps(plan_def_dict)
-
-    print(plan_json)
-
-    site_url_base = 'subscriptions/{}/resourceGroups/{}/providers/Microsoft.Web/serverfarms/{}?stamp={}&api-version={}'
-    site_url = site_url_base.format(subscription_id, resource_group_name, name, 'kc08geo.eastus.cloudapp.azure.com', '2014-11-01-privatepreview')
-    request_url = cmd.cli_ctx.cloud.endpoints.resource_manager + site_url
-    response = send_raw_request(cmd.cli_ctx, "PUT", request_url, body=plan_json)
-    return response.json()
-    
-
-def create_flex_app(cmd, resource_group_name, name, functionapp_def):
-    from azure.cli.core.commands.client_factory import get_subscription_id
-    functionapp_json = functionapp_def.serialize()
-    body = json.dumps(functionapp_json)
-    print(body)
-    subscription_id = get_subscription_id(cmd.cli_ctx)
-    site_url_base = 'subscriptions/{}/resourceGroups/{}/providers/Microsoft.Web/sites/{}?stamp={}&api-version={}'
-    site_url = site_url_base.format(subscription_id, resource_group_name, name, 'franklinmgeo.eastus.cloudapp.azure.com', '2016-09-01')
-    request_url = cmd.cli_ctx.cloud.endpoints.resource_manager + site_url
-    response = send_raw_request(cmd.cli_ctx, "PUT", request_url, body=body)
-    return response
 
 
 def _get_extension_version_functionapp(functions_version):
