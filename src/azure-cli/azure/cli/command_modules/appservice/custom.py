@@ -3684,7 +3684,7 @@ def create_flex_app(cmd, resource_group_name, name, functionapp_def):
     print(body)
     subscription_id = get_subscription_id(cmd.cli_ctx)
     site_url_base = 'subscriptions/{}/resourceGroups/{}/providers/Microsoft.Web/sites/{}?stamp={}&api-version={}'
-    site_url = site_url_base.format(subscription_id, resource_group_name, name, 'franklinmgeo.eastus.cloudapp.azure.com', '2016-09-01')
+    site_url = site_url_base.format(subscription_id, resource_group_name, name, 'kc08geo.eastus.cloudapp.azure.com', '2016-09-01')
     request_url = cmd.cli_ctx.cloud.endpoints.resource_manager + site_url
     response = send_raw_request(cmd.cli_ctx, "PUT", request_url, body=body)
     return response
@@ -3931,9 +3931,6 @@ def create_functionapp(cmd, resource_group_name, name, storage_account, plan=Non
             raise ValidationError("Invalid version {0} for runtime {1} for function apps on Flex App Service plans. "
                                   "Supported version for runtime {1} is {2}."
                                   .format(runtime_version, runtime, lang['version']))
-        
-
-
     else:
         runtime_helper = _FunctionAppStackRuntimeHelper(cmd, linux=is_linux, windows=(not is_linux))
         matched_runtime = runtime_helper.resolve("dotnet" if not runtime else runtime,
@@ -3942,7 +3939,8 @@ def create_functionapp(cmd, resource_group_name, name, storage_account, plan=Non
         site_config_dict = matched_runtime.site_config_dict
         app_settings_dict = matched_runtime.app_settings_dict
 
-    con_string = _validate_and_get_connection_string(cmd.cli_ctx, resource_group_name, storage_account)
+    # con_string = _validate_and_get_connection_string(cmd.cli_ctx, resource_group_name, storage_account)
+    con_string = "test"
 
     if environment is not None:
         site_config.app_settings.append(NameValuePair(name='AzureWebJobsStorage', value=con_string))
@@ -4000,10 +3998,11 @@ def create_functionapp(cmd, resource_group_name, name, storage_account, plan=Non
     else:
         functionapp_def.kind = 'functionapp'
 
-    # set site configs
-    for prop, value in site_config_dict.as_dict().items():
-        snake_case_prop = _convert_camel_to_snake_case(prop)
-        setattr(site_config, snake_case_prop, value)
+    if flexconsumption_location is None:
+        # set site configs
+        for prop, value in site_config_dict.as_dict().items():
+            snake_case_prop = _convert_camel_to_snake_case(prop)
+            setattr(site_config, snake_case_prop, value)
 
     if environment is not None:
         functionapp_def.kind = 'functionapp,linux,container,azurecontainerapps'
@@ -4050,17 +4049,21 @@ def create_functionapp(cmd, resource_group_name, name, storage_account, plan=Non
     if is_linux and consumption_plan_location is not None and runtime == 'dotnet-isolated':
         site_config.linux_fx_version = ''
 
-    # adding app settings
-    for app_setting, value in app_settings_dict.items():
-        site_config.app_settings.append(NameValuePair(name=app_setting, value=value))
+
+    if flexconsumption_location is None:
+        # adding app settings
+        for app_setting, value in app_settings_dict.items():
+            site_config.app_settings.append(NameValuePair(name=app_setting, value=value))
+
 
     site_config.app_settings.append(NameValuePair(name='FUNCTIONS_EXTENSION_VERSION',
                                                   value=_get_extension_version_functionapp(functions_version)))
     site_config.app_settings.append(NameValuePair(name='AzureWebJobsStorage', value=con_string))
 
     # If plan is not consumption or elastic premium, we need to set always on
-    if consumption_plan_location is None and plan_info is not None and not is_plan_elastic_premium(cmd, plan_info):
+    if consumption_plan_location is None and flexconsumption_location is None and plan_info is not None and not is_plan_elastic_premium(cmd, plan_info):
         site_config.always_on = True
+
 
     # If plan is elastic premium or consumption, we need these app settings
     if (plan_info is not None and is_plan_elastic_premium(cmd, plan_info)) or consumption_plan_location is not None:
@@ -4068,23 +4071,28 @@ def create_functionapp(cmd, resource_group_name, name, storage_account, plan=Non
                                                       value=con_string))
         site_config.app_settings.append(NameValuePair(name='WEBSITE_CONTENTSHARE', value=_get_content_share_name(name)))
 
-    create_app_insights = False
+    print("test error")
 
-    if app_insights_key is not None:
-        site_config.app_settings.append(NameValuePair(name='APPINSIGHTS_INSTRUMENTATIONKEY',
-                                                      value=app_insights_key))
-    elif app_insights is not None:
-        instrumentation_key = get_app_insights_key(cmd.cli_ctx, resource_group_name, app_insights)
-        site_config.app_settings.append(NameValuePair(name='APPINSIGHTS_INSTRUMENTATIONKEY',
-                                                      value=instrumentation_key))
-    elif disable_app_insights or not matched_runtime.app_insights:
-        # set up dashboard if no app insights
-        site_config.app_settings.append(NameValuePair(name='AzureWebJobsDashboard', value=con_string))
-    elif not disable_app_insights and matched_runtime.app_insights:
-        create_app_insights = True
+    # create_app_insights = False
 
-    poller = client.web_apps.begin_create_or_update(resource_group_name, name, functionapp_def)
-    functionapp = LongRunningOperation(cmd.cli_ctx)(poller)
+    # if app_insights_key is not None:
+    #     site_config.app_settings.append(NameValuePair(name='APPINSIGHTS_INSTRUMENTATIONKEY',
+    #                                                   value=app_insights_key))
+    # elif app_insights is not None:
+    #     instrumentation_key = get_app_insights_key(cmd.cli_ctx, resource_group_name, app_insights)
+    #     site_config.app_settings.append(NameValuePair(name='APPINSIGHTS_INSTRUMENTATIONKEY',
+    #                                                   value=instrumentation_key))
+    # elif disable_app_insights or not matched_runtime.app_insights:
+    #     # set up dashboard if no app insights
+    #     site_config.app_settings.append(NameValuePair(name='AzureWebJobsDashboard', value=con_string))
+    # elif not disable_app_insights and matched_runtime.app_insights:
+    #     create_app_insights = True
+
+    if flexconsumption_location:
+        return create_flex_app(cmd, resource_group_name, name, functionapp_def)
+    else:
+        poller = client.web_apps.begin_create_or_update(resource_group_name, name, functionapp_def)
+        functionapp = LongRunningOperation(cmd.cli_ctx)(poller)
 
     if consumption_plan_location and is_linux:
         logger.warning("Your Linux function app '%s', that uses a consumption plan has been successfully "
@@ -4094,14 +4102,14 @@ def create_functionapp(cmd, resource_group_name, name, storage_account, plan=Non
         _set_remote_or_local_git(cmd, functionapp, resource_group_name, name, deployment_source_url,
                                  deployment_source_branch, deployment_local_git)
 
-    if create_app_insights:
-        try:
-            try_create_application_insights(cmd, functionapp)
-        except Exception:  # pylint: disable=broad-except
-            logger.warning('Error while trying to create and configure an Application Insights for the Function App. '
-                           'Please use the Azure Portal to create and configure the Application Insights, if needed.')
-            update_app_settings(cmd, functionapp.resource_group, functionapp.name,
-                                ['AzureWebJobsDashboard={}'.format(con_string)])
+    # if create_app_insights:
+    #     try:
+    #         try_create_application_insights(cmd, functionapp)
+    #     except Exception:  # pylint: disable=broad-except
+    #         logger.warning('Error while trying to create and configure an Application Insights for the Function App. '
+    #                        'Please use the Azure Portal to create and configure the Application Insights, if needed.')
+    #         update_app_settings(cmd, functionapp.resource_group, functionapp.name,
+    #                             ['AzureWebJobsDashboard={}'.format(con_string)])
 
     if image and environment is None:
         update_container_settings_functionapp(cmd, resource_group_name, name, docker_registry_server_url,
