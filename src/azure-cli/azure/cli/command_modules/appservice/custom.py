@@ -3642,46 +3642,16 @@ def create_flex_app_service_plan(cmd, resource_group_name, name, location):
     existing_properties = plan_def.serialize()["properties"]
     plan_def.additional_properties["properties"] = existing_properties
     plan_def.additional_properties["properties"]["sku"] = "FlexConsumption"
-    print(plan_def.serialize())
     params = {}
     params['stamp'] = 'kc08geo.eastus.cloudapp.azure.com'
     poller = client.app_service_plans.begin_create_or_update(resource_group_name, name, plan_def, api_version='2014-11-01-privatepreview', params = params)
     return LongRunningOperation(cmd.cli_ctx)(poller)
 
 
-def create_flex_plan(cmd, resource_group_name, name, location=None, sku=None, tags=None, zone_redundant=None, max_burst=None):
-    from azure.cli.core.commands.client_factory import get_subscription_id
-    SkuDescription, AppServicePlan = cmd.get_models('SkuDescription', 'AppServicePlan')
-    sku_def = SkuDescription(tier='FlexConsumption', name='FL1', size='FL1', family='FL')
-    subscription_id = get_subscription_id(cmd.cli_ctx)
-    plan_id = '/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Web/serverfarms/{}'.format(subscription_id, resource_group_name, name)
-    plan_type = 'Microsoft.Web/serverfarms'
-    plan_kind = 'functionapp'
-
-    plan_def = AppServicePlan(location=location, sku=sku_def, kind=plan_kind)
-    plan_def_dict = plan_def.serialize()
-    plan_def_dict['id'] = plan_id
-    plan_def_dict['name'] = name
-    plan_def_dict['location'] = 'East US'
-    plan_def_dict['type'] = plan_type
-    plan_def_dict['properties']['sku']='FlexConsumption'
-    plan_def_dict['properties']['reserved']='true'
-    plan_json = json.dumps(plan_def_dict)
-
-    print(plan_json)
-
-    site_url_base = 'subscriptions/{}/resourceGroups/{}/providers/Microsoft.Web/serverfarms/{}?stamp={}&api-version={}'
-    site_url = site_url_base.format(subscription_id, resource_group_name, name, 'kc08geo.eastus.cloudapp.azure.com', '2014-11-01-privatepreview')
-    request_url = cmd.cli_ctx.cloud.endpoints.resource_manager + site_url
-    response = send_raw_request(cmd.cli_ctx, "PUT", request_url, body=plan_json)
-    return response.json()
-    
-
 def create_flex_app(cmd, resource_group_name, name, functionapp_def):
     from azure.cli.core.commands.client_factory import get_subscription_id
     functionapp_json = functionapp_def.serialize()
     body = json.dumps(functionapp_json)
-    print(body)
     subscription_id = get_subscription_id(cmd.cli_ctx)
     site_url_base = 'subscriptions/{}/resourceGroups/{}/providers/Microsoft.Web/sites/{}?stamp={}&api-version={}'
     site_url = site_url_base.format(subscription_id, resource_group_name, name, 'kc08geo.eastus.cloudapp.azure.com', '2016-09-01')
@@ -3689,6 +3659,34 @@ def create_flex_app(cmd, resource_group_name, name, functionapp_def):
     response = send_raw_request(cmd.cli_ctx, "PUT", request_url, body=body)
     return response.json()
 
+
+# def create_flex_plan(cmd, resource_group_name, name, location=None, sku=None, tags=None, zone_redundant=None, max_burst=None):
+#     from azure.cli.core.commands.client_factory import get_subscription_id
+#     SkuDescription, AppServicePlan = cmd.get_models('SkuDescription', 'AppServicePlan')
+#     sku_def = SkuDescription(tier='FlexConsumption', name='FL1', size='FL1', family='FL')
+#     subscription_id = get_subscription_id(cmd.cli_ctx)
+#     plan_id = '/subscriptions/{}/resourceGroups/{}/providers/Microsoft.Web/serverfarms/{}'.format(subscription_id, resource_group_name, name)
+#     plan_type = 'Microsoft.Web/serverfarms'
+#     plan_kind = 'functionapp'
+
+#     plan_def = AppServicePlan(location=location, sku=sku_def, kind=plan_kind)
+#     plan_def_dict = plan_def.serialize()
+#     plan_def_dict['id'] = plan_id
+#     plan_def_dict['name'] = name
+#     plan_def_dict['location'] = 'East US'
+#     plan_def_dict['type'] = plan_type
+#     plan_def_dict['properties']['sku']='FlexConsumption'
+#     plan_def_dict['properties']['reserved']='true'
+#     plan_json = json.dumps(plan_def_dict)
+
+#     print(plan_json)
+
+#     site_url_base = 'subscriptions/{}/resourceGroups/{}/providers/Microsoft.Web/serverfarms/{}?stamp={}&api-version={}'
+#     site_url = site_url_base.format(subscription_id, resource_group_name, name, 'kc08geo.eastus.cloudapp.azure.com', '2014-11-01-privatepreview')
+#     request_url = cmd.cli_ctx.cloud.endpoints.resource_manager + site_url
+#     response = send_raw_request(cmd.cli_ctx, "PUT", request_url, body=plan_json)
+#     return response.json()
+    
 
 def create_functionapp_app_service_plan(cmd, resource_group_name, name, is_linux, sku, number_of_workers=None,
                                         max_burst=None, location=None, tags=None, zone_redundant=False):
