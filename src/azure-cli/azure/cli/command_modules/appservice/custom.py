@@ -3631,7 +3631,7 @@ def create_flex_app_service_plan(cmd, resource_group_name, name, location):
     client = web_client_factory(cmd.cli_ctx)
     sku_def = SkuDescription(tier="FlexConsumption", name="FL1", size="FL", family="FL")
     plan_def = AppServicePlan(
-        location=location,
+        location='northcentralus(stage)',
         sku=sku_def,
         reserved=True,
         kind="functionapp",
@@ -3847,7 +3847,7 @@ def create_functionapp(cmd, resource_group_name, name, storage_account, plan=Non
         plan_info = create_flex_app_service_plan(
             cmd, resource_group_name, plan_name, flexconsumption_location)
         functionapp_def.server_farm_id = plan_info.id
-        functionapp_def.location = flexconsumption_location
+        functionapp_def.location = 'northcentralus(stage)'
 
     if environment is not None:
         if consumption_plan_location is not None:
@@ -4040,19 +4040,19 @@ def create_functionapp(cmd, resource_group_name, name, storage_account, plan=Non
         site_config.app_settings.append(NameValuePair(name='WEBSITE_CONTENTSHARE', value=_get_content_share_name(name)))
 
     create_app_insights = False
-
-    if app_insights_key is not None:
-        site_config.app_settings.append(NameValuePair(name='APPINSIGHTS_INSTRUMENTATIONKEY',
-                                                      value=app_insights_key))
-    elif app_insights is not None:
-        instrumentation_key = get_app_insights_key(cmd.cli_ctx, resource_group_name, app_insights)
-        site_config.app_settings.append(NameValuePair(name='APPINSIGHTS_INSTRUMENTATIONKEY',
-                                                      value=instrumentation_key))
-    elif disable_app_insights or not matched_runtime.app_insights:
-        # set up dashboard if no app insights
-        site_config.app_settings.append(NameValuePair(name='AzureWebJobsDashboard', value=con_string))
-    elif not disable_app_insights and matched_runtime.app_insights:
-        create_app_insights = True
+    if flexconsumption_location is None:
+        if app_insights_key is not None:
+            site_config.app_settings.append(NameValuePair(name='APPINSIGHTS_INSTRUMENTATIONKEY',
+                                                        value=app_insights_key))
+        elif app_insights is not None:
+            instrumentation_key = get_app_insights_key(cmd.cli_ctx, resource_group_name, app_insights)
+            site_config.app_settings.append(NameValuePair(name='APPINSIGHTS_INSTRUMENTATIONKEY',
+                                                        value=instrumentation_key))
+        elif disable_app_insights or not matched_runtime.app_insights:
+            # set up dashboard if no app insights
+            site_config.app_settings.append(NameValuePair(name='AzureWebJobsDashboard', value=con_string))
+        elif not disable_app_insights and matched_runtime.app_insights:
+            create_app_insights = True
 
     if flexconsumption_location:
         return create_flex_functionapp(cmd, resource_group_name, name, functionapp_def)
